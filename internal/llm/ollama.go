@@ -14,11 +14,9 @@ func NewOllama() LLMEngine {
 }
 
 func (o *Ollama) GeneratePlan(prompt string) (*Plan, error) {
-	payload := map[string]string{
-		"model": "phi",
-		"prompt": fmt.Sprintf(`
+	fullPrompt := fmt.Sprintf(`
 You are an IoT planner.
-Given a human command, respond ONLY with a JSON object like the following:
+Given a human command, respond ONLY with a JSON object like:
 
 {
   "actions": [
@@ -32,7 +30,12 @@ Given a human command, respond ONLY with a JSON object like the following:
 
 Now generate actions for this request:
 "%s"
-`, prompt),
+`, prompt)
+
+	payload := map[string]interface{}{
+		"model":  "phi",
+		"prompt": fullPrompt,
+		"stream": true,
 	}
 
 	body, _ := json.Marshal(payload)
@@ -42,17 +45,24 @@ Now generate actions for this request:
 	}
 	defer resp.Body.Close()
 
-	var response struct {
-		Response string `json:"response"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, err
+	// Read streaming JSON chunks
+	var resultBuilder bytes.Buffer
+	decoder := json.NewDecoder(resp.Body)
+	for decoder.More() {
+		var chunk map[string]string
+		if err := decoder.Decode(&chunk); err != nil {
+			break
+		}
+		if text, ok := chunk["response"]; ok {
+			resultBuilder.WriteString(text)
+		}
 	}
 
-	// LLM responds with stringified JSON — now decode that
+	finalOutput := resultBuilder.String()
+
 	var plan Plan
-	if err := json.Unmarshal([]byte(response.Response), &plan); err != nil {
-		return nil, fmt.Errorf("invalid LLM plan output: %v", err)
+	if err := json.Unmarshal([]byte(finalOutput), &plan); err != nil {
+		return nil, fmt.Errorf("invalid LLM plan output: %v\nRAW OUTPUT:\n%s", err, finalOutput)
 	}
 
 	return &plan, nil
