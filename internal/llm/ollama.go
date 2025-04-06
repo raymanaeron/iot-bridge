@@ -33,7 +33,7 @@ Now generate actions for this request:
 `, prompt)
 
 	payload := map[string]interface{}{
-		"model":  "phi",
+		"model":  "phi", // change to "tinyllama" or "mistral" if needed
 		"prompt": fullPrompt,
 		"stream": true,
 	}
@@ -45,18 +45,18 @@ Now generate actions for this request:
 	}
 	defer resp.Body.Close()
 
-	// Read streaming JSON chunks
 	var resultBuilder bytes.Buffer
 	decoder := json.NewDecoder(resp.Body)
+
 	for decoder.More() {
-		var chunk map[string]string
+		var chunk map[string]interface{}
 		if err := decoder.Decode(&chunk); err != nil {
-			fmt.Println("Error decoding chunk:", err)
+			fmt.Println("Decode error:", err)
 			break
 		}
-		fmt.Printf("Chunk: %+v\n", chunk)
 
-		if text, ok := chunk["response"]; ok {
+		// Only process string-based responses
+		if text, ok := chunk["response"].(string); ok {
 			resultBuilder.WriteString(text)
 		}
 	}
