@@ -15,8 +15,24 @@ func NewOllama() LLMEngine {
 
 func (o *Ollama) GeneratePlan(prompt string) (*Plan, error) {
 	payload := map[string]string{
-		"model":  "phi",
-		"prompt": fmt.Sprintf("Given this command, generate a list of JSON actions to control an IoT system: %s", prompt),
+		"model": "phi",
+		"prompt": fmt.Sprintf(`
+You are an IoT planner.
+Given a human command, respond ONLY with a JSON object like the following:
+
+{
+  "actions": [
+    {
+      "method": "POST",
+      "endpoint": "/devices/plug1/capabilities/power",
+      "body": { "state": "on" }
+    }
+  ]
+}
+
+Now generate actions for this request:
+"%s"
+`, prompt),
 	}
 
 	body, _ := json.Marshal(payload)
