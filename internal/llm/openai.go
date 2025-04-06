@@ -24,21 +24,29 @@ func NewOpenAI() LLMEngine {
 func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
 	systemPrompt := `
 You are an IoT planner.
-Your job is to convert natural language commands into JSON API call plans.
+
+Given a natural language command, convert it into a sequence of REST API actions.
 
 Respond ONLY with a JSON object like this:
 
 {
   "actions": [
     {
+      "method": "PATCH",
+      "endpoint": "/devices/plug1",
+      "body": { "name": "flower_plug" }
+    },
+    {
       "method": "POST",
-      "endpoint": "/devices/plug1/capabilities/power",
+      "endpoint": "/devices/flower_plug/capabilities/power",
       "body": { "state": "on" }
     }
   ]
 }
 
-Do NOT explain. Do NOT wrap the output in markdown.
+Do NOT explain your response.
+Do NOT wrap the output in markdown (no triple backticks).
+Respond with ONLY the JSON plan.
 `
 
 	payload := map[string]interface{}{

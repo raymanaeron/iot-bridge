@@ -15,3 +15,6 @@ ollama pull phi
 
 ollama pull tinyllama
 
+> To upload .env into the PI from Windows
+
+scp .env rayman@raspberrypi.local:/home/rayman/iot-bridge/
