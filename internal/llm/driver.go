@@ -1,9 +1,13 @@
 package llm
 
+import (
+	"encoding/json"
+)
+
 type PlannedAction struct {
-	Method   string `json:"method"`
-	Endpoint string `json:"endpoint"`
-	Body     []byte `json:"body"`
+	Method   string          `json:"method"`
+	Endpoint string          `json:"endpoint"`
+	Body     json.RawMessage `json:"body"`
 }
 
 type Plan struct {
