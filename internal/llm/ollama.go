@@ -16,24 +16,27 @@ func NewOllama() LLMEngine {
 
 func (o *Ollama) GeneratePlan(prompt string) (*Plan, error) {
 	fullPrompt := fmt.Sprintf(`
-You are an IoT planner.
-Given a human command, respond ONLY with a JSON object like this:
-
-{
-  "actions": [
-    {
-      "method": "POST",
-      "endpoint": "/devices/plug1/capabilities/power",
-      "body": { "state": "on" }
-    }
-  ]
-}
-
-Do NOT explain. Do NOT wrap the response in markdown. Output ONLY valid JSON.
-
-Now generate actions for this request:
-"%s"
-`, prompt)
+	You are an IoT planner.
+	
+	Your job is to convert a user's instruction into a structured JSON action plan.
+	
+	Respond ONLY with a JSON object. Do NOT wrap it in triple-backticks. Do NOT explain anything.
+	
+	Example format:
+	
+	{
+	  "actions": [
+		{
+		  "method": "POST",
+		  "endpoint": "/devices/plug1/capabilities/power",
+		  "body": { "state": "on" }
+		}
+	  ]
+	}
+	
+	Now generate actions for this command:
+	"%s"
+	`, prompt)
 
 	payload := map[string]interface{}{
 		"model":  "phi",
@@ -77,7 +80,14 @@ func extractPureJSON(s string) string {
 	start := strings.Index(s, "{")
 	end := strings.LastIndex(s, "}")
 	if start >= 0 && end > start {
-		return s[start : end+1]
+		jsonBlock := s[start : end+1]
+
+		// Clean up common markdown junk
+		jsonBlock = strings.TrimPrefix(jsonBlock, "```json")
+		jsonBlock = strings.TrimPrefix(jsonBlock, "```")
+		jsonBlock = strings.TrimSuffix(jsonBlock, "```")
+
+		return strings.TrimSpace(jsonBlock)
 	}
-	return s
+	return ""
 }
