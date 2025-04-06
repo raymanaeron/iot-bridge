@@ -51,8 +51,11 @@ Now generate actions for this request:
 	for decoder.More() {
 		var chunk map[string]string
 		if err := decoder.Decode(&chunk); err != nil {
+			fmt.Println("Error decoding chunk:", err)
 			break
 		}
+		fmt.Printf("Chunk: %+v\n", chunk)
+
 		if text, ok := chunk["response"]; ok {
 			resultBuilder.WriteString(text)
 		}
