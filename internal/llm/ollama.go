@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Ollama struct{}
@@ -16,7 +17,7 @@ func NewOllama() LLMEngine {
 func (o *Ollama) GeneratePlan(prompt string) (*Plan, error) {
 	fullPrompt := fmt.Sprintf(`
 You are an IoT planner.
-Given a human command, respond ONLY with a JSON object like:
+Given a human command, respond ONLY with a JSON object like this:
 
 {
   "actions": [
@@ -28,12 +29,14 @@ Given a human command, respond ONLY with a JSON object like:
   ]
 }
 
+Do NOT explain. Do NOT wrap the response in markdown. Output ONLY valid JSON.
+
 Now generate actions for this request:
 "%s"
 `, prompt)
 
 	payload := map[string]interface{}{
-		"model":  "phi", // change to "tinyllama" or "mistral" if needed
+		"model":  "phi",
 		"prompt": fullPrompt,
 		"stream": true,
 	}
@@ -54,19 +57,27 @@ Now generate actions for this request:
 			fmt.Println("Decode error:", err)
 			break
 		}
-
-		// Only process string-based responses
 		if text, ok := chunk["response"].(string); ok {
 			resultBuilder.WriteString(text)
 		}
 	}
 
 	finalOutput := resultBuilder.String()
+	cleaned := extractPureJSON(finalOutput)
 
 	var plan Plan
-	if err := json.Unmarshal([]byte(finalOutput), &plan); err != nil {
+	if err := json.Unmarshal([]byte(cleaned), &plan); err != nil {
 		return nil, fmt.Errorf("invalid LLM plan output: %v\nRAW OUTPUT:\n%s", err, finalOutput)
 	}
 
 	return &plan, nil
+}
+
+func extractPureJSON(s string) string {
+	start := strings.Index(s, "{")
+	end := strings.LastIndex(s, "}")
+	if start >= 0 && end > start {
+		return s[start : end+1]
+	}
+	return s
 }
