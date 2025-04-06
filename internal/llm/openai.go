@@ -22,10 +22,16 @@ func NewOpenAI() LLMEngine {
 }
 
 func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
+
 	systemPrompt := `
 You are an IoT planner.
 
-Given a natural language command, convert it into a sequence of REST API actions.
+Device IDs like "plug1" or "bulb2" are permanent identifiers and do not change.
+
+Users may rename a device by updating its 'name' field via:
+PATCH /devices/{id}
+
+But the ID remains the same and must still be used in all future actions.
 
 Respond ONLY with a JSON object like this:
 
@@ -34,21 +40,20 @@ Respond ONLY with a JSON object like this:
     {
       "method": "PATCH",
       "endpoint": "/devices/plug1",
-      "body": { "name": "flower_plug" }
+      "body": { "name": "multi-plug" }
     },
     {
       "method": "POST",
-      "endpoint": "/devices/flower_plug/capabilities/power",
+      "endpoint": "/devices/plug1/capabilities/power",
       "body": { "state": "on" }
     }
   ]
 }
 
-Do NOT explain your response.
-Do NOT wrap the output in markdown (no triple backticks).
-Respond with ONLY the JSON plan.
+Do NOT wrap the output in markdown.
+Do NOT include any explanation.
+Respond ONLY with the JSON object.
 `
-
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
