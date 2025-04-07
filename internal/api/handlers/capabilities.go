@@ -70,7 +70,9 @@ func InvokeCapability(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get capability definition
-	caps := storemodel.GetCapabilitiesForType(device.Type)
+	//caps := storemodel.GetCapabilitiesForType(device.Type)
+	caps := device.Capabilities
+
 	var selectedCap *storemodel.Capability
 	for _, cap := range caps {
 		if cap.Name == capabilityName {
