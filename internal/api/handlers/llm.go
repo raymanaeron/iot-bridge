@@ -69,8 +69,15 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 		respText, _ := io.ReadAll(resp.Body)
 		if len(respText) > 0 {
-			sb.WriteString(indent(string(respText), "   ") + "\n")
+			var pretty bytes.Buffer
+			if err := json.Indent(&pretty, respText, "   ", "  "); err != nil {
+				// fallback if not JSON
+				sb.WriteString(indent(string(respText), "   ") + "\n")
+			} else {
+				sb.WriteString(pretty.String() + "\n")
+			}
 		}
+
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
