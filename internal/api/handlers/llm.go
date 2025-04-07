@@ -31,6 +31,11 @@ type DeviceWithCapabilities struct {
 }
 
 func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		http.ServeFile(w, r, "./web/index.html")
+		return
+	}
+
 	var req LLMRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Prompt == "" {
 		http.Error(w, "Missing or invalid prompt", http.StatusBadRequest)
@@ -44,36 +49,29 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var results []ActionResult
-	var formattedDevices []DeviceWithCapabilities
+	var buffer bytes.Buffer
+	buffer.WriteString(fmt.Sprintf("You: %s\n", req.Prompt))
 
 	for _, action := range plan.Actions {
-		fullURL := fmt.Sprintf("http://localhost:8080%s", action.Endpoint)
+		method := strings.ToUpper(action.Method)
+		endpoint := action.Endpoint
+		fullURL := fmt.Sprintf("http://localhost:8080%s", endpoint)
 
-		var method = strings.ToUpper(action.Method)
-		var body io.Reader
+		var reqBody io.Reader
 		if len(action.Body) > 0 {
-			body = bytes.NewReader(action.Body)
+			reqBody = bytes.NewReader(action.Body)
 		}
 
-		req, err := http.NewRequest(method, fullURL, body)
+		httpReq, err := http.NewRequest(method, fullURL, reqBody)
 		if err != nil {
-			results = append(results, ActionResult{
-				Method:   method,
-				Endpoint: action.Endpoint,
-				Status:   "failed (invalid request)",
-			})
+			buffer.WriteString(fmt.Sprintf("→ %s %s\n   failed (invalid request)\n\n", method, endpoint))
 			continue
 		}
-		req.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Content-Type", "application/json")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(httpReq)
 		if err != nil {
-			results = append(results, ActionResult{
-				Method:   method,
-				Endpoint: action.Endpoint,
-				Status:   "failed (HTTP error)",
-			})
+			buffer.WriteString(fmt.Sprintf("→ %s %s\n   failed (HTTP error)\n\n", method, endpoint))
 			continue
 		}
 		defer resp.Body.Close()
@@ -82,57 +80,62 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		if resp.StatusCode >= 300 {
 			status = fmt.Sprintf("failed (%s)", resp.Status)
 		}
+		buffer.WriteString(fmt.Sprintf("→ %s %s\n   %s\n", method, endpoint, status))
 
-		results = append(results, ActionResult{
-			Method:   method,
-			Endpoint: action.Endpoint,
-			Status:   status,
-		})
+		// If GET /devices, also print devices with capabilities
+		if method == "GET" && endpoint == "/devices" && resp.StatusCode == 200 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			var devices []map[string]interface{}
+			json.Unmarshal(bodyBytes, &devices)
 
-		// Custom logic: If this is GET /devices → read all devices
-		if method == "GET" && action.Endpoint == "/devices" && resp.StatusCode == 200 {
-			var devices []store.Device
-			json.NewDecoder(resp.Body).Decode(&devices)
-
-			// pre-fill devices for capability fetch
 			for _, d := range devices {
-				formattedDevices = append(formattedDevices, DeviceWithCapabilities{
-					ID:   d.ID,
-					Name: d.Name,
-					Type: d.Type,
-					Room: d.Room,
-				})
+				id := d["id"].(string)
+				name := d["name"].(string)
+				deviceType := d["type"].(string)
+				room := d["room"].(string)
+
+				buffer.WriteString(fmt.Sprintf("\n• %s - %s (%s in %s)\n", id, name, deviceType, room))
+
+				// Fetch capabilities
+				capURL := fmt.Sprintf("http://localhost:8080/devices/%s/capabilities", id)
+				capResp, err := http.Get(capURL)
+				if err != nil || capResp.StatusCode != 200 {
+					buffer.WriteString("   (failed to retrieve capabilities)\n")
+					continue
+				}
+				defer capResp.Body.Close()
+
+				var capBody struct {
+					Capabilities []struct {
+						Name        string `json:"name"`
+						Description string `json:"description"`
+					} `json:"capabilities"`
+				}
+				json.NewDecoder(capResp.Body).Decode(&capBody)
+
+				for _, cap := range capBody.Capabilities {
+					buffer.WriteString(fmt.Sprintf("  - %s: %s\n", cap.Name, cap.Description))
+				}
 			}
+			buffer.WriteString("\n")
+		} else {
+			// Drain the response body for other endpoints
+			io.Copy(io.Discard, resp.Body)
 		}
 
-		// Populate capabilities into formattedDevices if this is a GET /devices/{id}/capabilities
-		if method == "GET" && strings.Contains(action.Endpoint, "/capabilities") && resp.StatusCode == 200 {
-			parts := strings.Split(action.Endpoint, "/")
-			if len(parts) >= 3 {
-				deviceID := parts[2]
-				var capsResp struct {
-					Capabilities []store.Capability `json:"capabilities"`
-				}
-				json.NewDecoder(resp.Body).Decode(&capsResp)
-
-				for i := range formattedDevices {
-					if formattedDevices[i].ID == deviceID {
-						formattedDevices[i].Capabilities = capsResp.Capabilities
-					}
-				}
-			}
-		}
+		buffer.WriteString("\n")
 	}
 
-	// Response structure
-	respData := map[string]interface{}{
-		"prompt":  req.Prompt,
-		"actions": results,
-	}
-	if len(formattedDevices) > 0 {
-		respData["devices"] = formattedDevices
+	// Return plain text or JSON
+	if strings.Contains(r.Header.Get("Accept"), "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"prompt":  req.Prompt,
+			"summary": buffer.String(),
+		})
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(respData)
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(buffer.String()))
 }
