@@ -3,8 +3,9 @@ package store
 type Capability struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
-	Operations  []string               `json:"operations"`
-	Parameters  map[string]interface{} `json:"parameters,omitempty"`
+	Parameters  map[string]interface{} `json:"parameters"`
+	Operations  []string               `json:"operations,omitempty"`
+	Writable    bool                   `json:"writable"` // ← NEW FIELD
 }
 
 func GetCapabilitiesForType(deviceType string) []Capability {
