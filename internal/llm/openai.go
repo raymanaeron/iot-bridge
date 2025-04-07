@@ -46,30 +46,35 @@ Available API endpoints:
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString("Known devices and capabilities:\n")
 	for _, d := range devices {
-		contextBuilder.WriteString(fmt.Sprintf("- ID: %s, Name: %s, Type: %s, Room: %s\n", d.ID, d.Name, d.Type, d.Room))
+		contextBuilder.WriteString(fmt.Sprintf("- Name: \"%s\", ID: \"%s\", Type: %s, Room: %s\n", d.Name, d.ID, d.Type, d.Room))
 		for _, cap := range d.Capabilities {
 			var paramList []string
 			for k := range cap.Parameters {
 				paramList = append(paramList, k)
 			}
-			contextBuilder.WriteString(fmt.Sprintf("  • %s (%s)\n", cap.Name, strings.Join(paramList, ", ")))
+			writability := "read-only"
+			if cap.Writable {
+				writability = "writable"
+			}
+			contextBuilder.WriteString(fmt.Sprintf("  • %s (%s) — %s\n", cap.Name, strings.Join(paramList, ", "), writability))
 		}
 	}
 
-	systemPrompt := fmt.Sprintf(`
-You are an IoT planner.
+	systemPrompt := fmt.Sprintf(`You are an IoT planner.
 
-Given a natural language command, convert it into a sequence of REST API calls based on the following API specification:
+You convert natural language commands into precise REST API plans.
+
+Use this API spec:
 
 %s
 
 %s
 
-Rules:
-- Only use device IDs and capabilities provided in the context.
-- Include the correct method, endpoint, and JSON body for each action.
-- Ensure parameter names and value types match what is available.
-- Respond only with a valid JSON object in this format:
+Instructions:
+- Use exact device names or IDs from the context above. Do NOT guess or assume.
+- Prefer writable capabilities for POST requests. Read-only capabilities should never be set.
+- Match parameter names and types carefully from context.
+- Output only a JSON object like this:
   {
     "actions": [
       {
@@ -79,15 +84,30 @@ Rules:
       }
     ]
   }
-- Do not include explanations or markdown.
+- No explanations. No markdown. Only pure JSON.
 `, apiDoc, contextBuilder.String())
 
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
+
+			// Few-shot examples
 			{"role": "user", "content": "List all devices"},
 			{"role": "assistant", "content": `{"actions":[{"method":"GET","endpoint":"/devices"}]}`},
+
+			{"role": "user", "content": "Turn on Living Room Bulb"},
+			{"role": "assistant", "content": `{
+  "actions": [
+    {
+      "method": "POST",
+      "endpoint": "/devices/bulb1/capabilities/power",
+      "body": { "state": "on" }
+    }
+  ]
+}`},
+
+			// Actual user input
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.2,
