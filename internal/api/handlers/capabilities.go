@@ -103,11 +103,19 @@ func InvokeCapability(w http.ResponseWriter, r *http.Request) {
 
 		switch spec["type"] {
 		case "integer":
-			valFloat, ok := value.(float64)
-			if !ok {
-				http.Error(w, fmt.Sprintf("Parameter '%s' must be an integer", paramName), http.StatusBadRequest)
+			var valFloat float64
+			switch v := value.(type) {
+			case float64:
+				valFloat = v
+			case int:
+				valFloat = float64(v)
+			case int64:
+				valFloat = float64(v)
+			default:
+				http.Error(w, fmt.Sprintf("Parameter '%s' must be a number", paramName), http.StatusBadRequest)
 				return
 			}
+
 			// Range check
 			if bounds, ok := spec["range"].([]interface{}); ok && len(bounds) == 2 {
 				min := int(bounds[0].(float64))
