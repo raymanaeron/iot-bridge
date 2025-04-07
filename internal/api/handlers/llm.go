@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"iot-bridge/internal/llm"
+	"iot-bridge/internal/store/factory"
 	"net/http"
+	"strings"
 )
 
 type LLMRequest struct {
@@ -17,6 +19,17 @@ type ActionResult struct {
 	Endpoint string `json:"endpoint"`
 	Method   string `json:"method"`
 	Status   string `json:"status"`
+}
+
+// 🧠 Match a known device name to its ID
+func resolveDeviceIDFromName(name string) (string, bool) {
+	devices := factory.GetDeviceStore().GetAll()
+	for _, d := range devices {
+		if strings.EqualFold(d.Name, name) {
+			return d.ID, true
+		}
+	}
+	return "", false
 }
 
 func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +44,20 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "LLM error: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// 🧠 Patch any placeholder {id} with real ID from prompt
+	for i, action := range plan.Actions {
+		if strings.Contains(action.Endpoint, "{id}") {
+			// Try matching any known device name inside the original prompt
+			devices := factory.GetDeviceStore().GetAll()
+			for _, d := range devices {
+				if strings.Contains(strings.ToLower(req.Prompt), strings.ToLower(d.Name)) {
+					plan.Actions[i].Endpoint = strings.Replace(action.Endpoint, "{id}", d.ID, 1)
+					break
+				}
+			}
+		}
 	}
 
 	var results []ActionResult
