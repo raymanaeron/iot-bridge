@@ -31,11 +31,6 @@ type DeviceWithCapabilities struct {
 }
 
 func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		http.ServeFile(w, r, "./web/index.html")
-		return
-	}
-
 	var req LLMRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Prompt == "" {
 		http.Error(w, "Missing or invalid prompt", http.StatusBadRequest)
@@ -49,93 +44,43 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var buffer bytes.Buffer
-	buffer.WriteString(fmt.Sprintf("You: %s\n", req.Prompt))
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("You: %s\n", req.Prompt))
 
 	for _, action := range plan.Actions {
-		method := strings.ToUpper(action.Method)
-		endpoint := action.Endpoint
-		fullURL := fmt.Sprintf("http://localhost:8080%s", endpoint)
+		fullURL := fmt.Sprintf("http://localhost:8080%s", action.Endpoint)
 
-		var reqBody io.Reader
-		if len(action.Body) > 0 {
-			reqBody = bytes.NewReader(action.Body)
-		}
-
-		httpReq, err := http.NewRequest(method, fullURL, reqBody)
+		reqBody := bytes.NewReader(action.Body)
+		apiReq, err := http.NewRequest(action.Method, fullURL, reqBody)
 		if err != nil {
-			buffer.WriteString(fmt.Sprintf("→ %s %s\n   failed (invalid request)\n\n", method, endpoint))
+			sb.WriteString(fmt.Sprintf("→ %s %s\n   failed (invalid request)\n", action.Method, action.Endpoint))
 			continue
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
+		apiReq.Header.Set("Content-Type", "application/json")
 
-		resp, err := http.DefaultClient.Do(httpReq)
+		resp, err := http.DefaultClient.Do(apiReq)
 		if err != nil {
-			buffer.WriteString(fmt.Sprintf("→ %s %s\n   failed (HTTP error)\n\n", method, endpoint))
+			sb.WriteString(fmt.Sprintf("→ %s %s\n   failed (http error)\n", action.Method, action.Endpoint))
 			continue
 		}
 		defer resp.Body.Close()
 
-		status := "success"
-		if resp.StatusCode >= 300 {
-			status = fmt.Sprintf("failed (%s)", resp.Status)
+		sb.WriteString(fmt.Sprintf("→ %s %s\n   %s\n", action.Method, action.Endpoint, resp.Status))
+
+		respText, _ := io.ReadAll(resp.Body)
+		if len(respText) > 0 {
+			sb.WriteString(indent(string(respText), "   ") + "\n")
 		}
-		buffer.WriteString(fmt.Sprintf("→ %s %s\n   %s\n", method, endpoint, status))
-
-		// If GET /devices, also print devices with capabilities
-		if method == "GET" && endpoint == "/devices" && resp.StatusCode == 200 {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			var devices []map[string]interface{}
-			json.Unmarshal(bodyBytes, &devices)
-
-			for _, d := range devices {
-				id := d["id"].(string)
-				name := d["name"].(string)
-				deviceType := d["type"].(string)
-				room := d["room"].(string)
-
-				buffer.WriteString(fmt.Sprintf("\n• %s - %s (%s in %s)\n", id, name, deviceType, room))
-
-				// Fetch capabilities
-				capURL := fmt.Sprintf("http://localhost:8080/devices/%s/capabilities", id)
-				capResp, err := http.Get(capURL)
-				if err != nil || capResp.StatusCode != 200 {
-					buffer.WriteString("   (failed to retrieve capabilities)\n")
-					continue
-				}
-				defer capResp.Body.Close()
-
-				var capBody struct {
-					Capabilities []struct {
-						Name        string `json:"name"`
-						Description string `json:"description"`
-					} `json:"capabilities"`
-				}
-				json.NewDecoder(capResp.Body).Decode(&capBody)
-
-				for _, cap := range capBody.Capabilities {
-					buffer.WriteString(fmt.Sprintf("  - %s: %s\n", cap.Name, cap.Description))
-				}
-			}
-			buffer.WriteString("\n")
-		} else {
-			// Drain the response body for other endpoints
-			io.Copy(io.Discard, resp.Body)
-		}
-
-		buffer.WriteString("\n")
-	}
-
-	// Return plain text or JSON
-	if strings.Contains(r.Header.Get("Accept"), "application/json") {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"prompt":  req.Prompt,
-			"summary": buffer.String(),
-		})
-		return
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(buffer.String()))
+	w.Write([]byte(sb.String()))
+}
+
+func indent(text string, prefix string) string {
+	lines := strings.Split(text, "\n")
+	for i := range lines {
+		lines[i] = prefix + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
