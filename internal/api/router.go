@@ -32,6 +32,7 @@ func NewRouter() http.Handler {
 
 		r.Get("/{id}/capabilities", handlers.GetCapabilities)
 		r.Post("/{id}/capabilities/{capability}", handlers.InvokeCapability)
+		r.Post("/{id}/capabilities", handlers.UpdateCapabilities)
 	})
 
 	r.Post("/llm", handlers.HandleLLMRequest)
