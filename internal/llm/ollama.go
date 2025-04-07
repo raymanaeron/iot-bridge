@@ -74,20 +74,3 @@ func (o *Ollama) GeneratePlan(prompt string) (*Plan, error) {
 
 	return &plan, nil
 }
-
-/*
-func extractPureJSON(s string) string {
-	start := strings.Index(s, "{")
-	end := strings.LastIndex(s, "}")
-	if start >= 0 && end > start {
-		jsonBlock := s[start : end+1]
-
-		// Clean up common markdown junk
-		jsonBlock = strings.TrimPrefix(jsonBlock, "```json")
-		jsonBlock = strings.TrimPrefix(jsonBlock, "```")
-		jsonBlock = strings.TrimSuffix(jsonBlock, "```")
-
-		return strings.TrimSpace(jsonBlock)
-	}
-	return ""
-}*/

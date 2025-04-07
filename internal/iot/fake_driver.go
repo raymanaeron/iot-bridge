@@ -22,7 +22,9 @@ func (f *FakeDriver) SetState(device store.Device, updates map[string]string) er
 
 var defaultDriver = &FakeDriver{}
 
+/*
 // GetDriverFor returns the default driver for now.
 func GetDriverFor(device store.Device) DeviceDriver {
 	return defaultDriver
 }
+*/

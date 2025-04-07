@@ -11,7 +11,14 @@ require github.com/joho/godotenv v1.5.1
 require modernc.org/sqlite v1.37.0
 
 require (
+	github.com/gorilla/websocket v1.5.3 // indirect
+	golang.org/x/net v0.27.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+)
+
+require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
