@@ -34,22 +34,22 @@ func NewRouter() http.Handler {
 		r.Delete("/{id}", handlers.DeleteDevice)
 
 		r.Get("/{id}/capabilities", handlers.GetCapabilities)
-		r.Post("/{id}/capabilities/{capability}", handlers.InvokeCapability)
 		r.Post("/{id}/capabilities", handlers.UpdateCapabilities)
+		r.Post("/{id}/capabilities/{capability}", handlers.InvokeCapability)
 	})
 
-	// LLM interaction (POST) and optional browser support
+	// LLM interaction (POST for JSON, GET for UI)
 	r.Post("/llm", handlers.HandleLLMRequest)
 	r.Get("/llm", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.ServeFile(w, r, "./web/index.html")
 	})
 
-	// Web UI - Serve index.html from /web
+	// Web UI - root page serves the chat interface
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./web/index.html")
 	})
 
-	// Static assets (optional: CSS, JS, etc.)
+	// Static assets (JS, CSS, icons)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./web"))))
 
 	return r
