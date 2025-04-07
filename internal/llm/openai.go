@@ -35,7 +35,7 @@ Available API endpoints:
 - PATCH /devices/{id} → Update device metadata (name, room, etc)
 - DELETE /devices/{id} → Remove a device
 - GET /devices/{id}/capabilities → List what actions a device supports
-- POST /devices/{id}/capabilities/{capability} → Turn on/off, change brightness, etc.
+- POST /devices/{id}/capabilities/{capability} → Turn on/off, change brightness, set speed, etc.
 - POST /scan → Start device scan
 - GET /scan/results → Retrieve discovered devices
 `
@@ -75,13 +75,29 @@ Rules:
 - DO NOT include text outside the JSON.
 `, apiDoc, contextBlock)
 
-	// Step 3: Few-shot example + user prompt
+	// Step 3: Few-shot examples + user prompt
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
+
+			// Few-shot: list devices
 			{"role": "user", "content": "List all devices"},
 			{"role": "assistant", "content": `{"actions":[{"method":"GET","endpoint":"/devices"}]}`},
+
+			// Few-shot: set fan speed
+			{"role": "user", "content": "Set ceiling fan speed to 75%"},
+			{"role": "assistant", "content": `{
+  "actions": [
+    {
+      "method": "POST",
+      "endpoint": "/devices/fan1/capabilities/speed",
+      "body": { "level": 75 }
+    }
+  ]
+}`},
+
+			// Actual user prompt
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.2,
