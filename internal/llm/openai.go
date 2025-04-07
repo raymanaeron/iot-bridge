@@ -70,6 +70,7 @@ Rules:
       }
     ]
   }
+- DO NOT leave out required parameters from capabilities
 - DO NOT explain anything.
 - DO NOT wrap your output in markdown.
 - DO NOT include text outside the JSON.
