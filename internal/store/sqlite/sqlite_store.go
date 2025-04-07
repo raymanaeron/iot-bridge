@@ -25,6 +25,7 @@ func New() store.DeviceStore {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open SQLite DB: %v", err))
 	}
+	db.Exec(`PRAGMA journal_mode = WAL;`)
 
 	createTable := `
 	CREATE TABLE IF NOT EXISTS devices (
