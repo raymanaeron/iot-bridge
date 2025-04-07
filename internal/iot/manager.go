@@ -2,7 +2,6 @@ package iot
 
 import (
 	"iot-bridge/internal/config"
-	"iot-bridge/internal/store"
 )
 
 var activeDriver DeviceDriver
@@ -16,6 +15,8 @@ func Init() {
 	}
 }
 
+/*
 func GetDriverFor(device store.Device) DeviceDriver {
 	return activeDriver
 }
+*/
