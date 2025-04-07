@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -26,15 +27,8 @@ func Init() {
 	opts.SetClientID("iot-bridge-zigbee")
 	opts.OnConnect = func(c mqtt.Client) {
 		log.Println("[Zigbee] Connected to MQTT")
-
-		// State updates
 		if token := c.Subscribe("zigbee2mqtt/+", 0, messageHandler); token.Wait() && token.Error() != nil {
-			log.Println("[Zigbee] Failed to subscribe to device state:", token.Error())
-		}
-
-		// Device discovery
-		if token := c.Subscribe("zigbee2mqtt/bridge/devices", 0, deviceListHandler); token.Wait() && token.Error() != nil {
-			log.Println("[Zigbee] Failed to subscribe to device list:", token.Error())
+			log.Println("[Zigbee] Failed to subscribe:", token.Error())
 		}
 	}
 	mqttClient = mqtt.NewClient(opts)
@@ -52,7 +46,7 @@ func messageHandler(client mqtt.Client, msg mqtt.Message) {
 	payload := msg.Payload()
 
 	if strings.HasSuffix(topic, "/set") {
-		return // Ignore set commands
+		return // Ignore set acknowledgments
 	}
 
 	deviceID := strings.TrimPrefix(topic, "zigbee2mqtt/")
@@ -71,45 +65,31 @@ func messageHandler(client mqtt.Client, msg mqtt.Message) {
 	deviceStates[deviceID] = stringState
 	stateMu.Unlock()
 
-	log.Printf("[Zigbee] Updated state for %s: %+v", deviceID, stringState)
-}
+	deviceStore := factory.GetDeviceStore()
 
-func deviceListHandler(client mqtt.Client, msg mqtt.Message) {
-	var devices []struct {
-		FriendlyName string `json:"friendly_name"`
-		ModelID      string `json:"model_id"`
-		Description  string `json:"description"`
-	}
+	// Check if device is already known
+	_, exists := deviceStore.Get(deviceID)
 
-	if err := json.Unmarshal(msg.Payload(), &devices); err != nil {
-		log.Println("[Zigbee] Failed to parse device list:", err)
-		return
-	}
-
-	for _, d := range devices {
-		log.Printf("[Zigbee] Discovered device: %s (%s)", d.FriendlyName, d.ModelID)
-
-		// Attempt to auto-register
-		autoRegisterZigbeeDevice(store.Device{
-			ID:       d.FriendlyName,
-			Name:     d.Description,
-			Type:     "bulb", // You can improve this with model/type mapping
-			Protocol: "zigbee",
-			Room:     "Unknown",
-			State:    map[string]string{},
-		})
-	}
-}
-
-func autoRegisterZigbeeDevice(dev store.Device) {
-	ds := factory.GetDeviceStore()
-	if _, found := ds.Get(dev.ID); found {
-		return // Already exists
-	}
-	if err := ds.Add(dev); err != nil {
-		log.Printf("[Zigbee] Failed to add device %s: %v", dev.ID, err)
+	if !exists {
+		newDevice := store.Device{
+			ID:           deviceID,
+			Name:         deviceID,
+			Type:         "zigbee", // you can enhance this later
+			Protocol:     "zigbee",
+			Room:         "unknown",
+			State:        stringState,
+			Capabilities: inferCapabilities(state),
+		}
+		if err := deviceStore.Add(newDevice); err != nil {
+			log.Printf("[Zigbee] Failed to add device %s: %v", deviceID, err)
+		} else {
+			log.Printf("[Zigbee] Registered new device: %s", deviceID)
+		}
 	} else {
-		log.Printf("[Zigbee] Registered new device: %s", dev.ID)
+		// Update just the state
+		if err := deviceStore.UpdateState(deviceID, stringState); err != nil {
+			log.Printf("[Zigbee] Failed to update state for %s: %v", deviceID, err)
+		}
 	}
 }
 
@@ -131,8 +111,42 @@ func (z *ZigbeeDriver) SetState(device store.Device, updates map[string]string) 
 	return token.Error()
 }
 
-// Optional: Call this when /scan is hit
-func StartPermitJoin(duration int) {
-	payload := fmt.Sprintf(`{"value":true,"time":%d}`, duration)
-	mqttClient.Publish("zigbee2mqtt/bridge/request/permit_join", 0, false, payload)
+func inferCapabilities(payload map[string]interface{}) []store.Capability {
+	var capabilities []store.Capability
+	for key, value := range payload {
+		// Skip system fields or metrics
+		if strings.HasPrefix(key, "linkquality") || key == "update" {
+			continue
+		}
+
+		cap := store.Capability{
+			Name:        key,
+			Description: fmt.Sprintf("Auto-discovered capability for '%s'", key),
+			Parameters: map[string]interface{}{
+				key: inferParameterSchema(value),
+			},
+		}
+		capabilities = append(capabilities, cap)
+	}
+	return capabilities
+}
+
+func inferParameterSchema(value interface{}) map[string]interface{} {
+	schema := map[string]interface{}{}
+	switch v := value.(type) {
+	case float64:
+		schema["type"] = "integer"
+		schema["range"] = []int{0, 100}
+	case string:
+		schema["type"] = "string"
+	case bool:
+		schema["type"] = "string"
+		schema["operations"] = []string{"on", "off"}
+	case []interface{}:
+		schema["type"] = "array"
+		schema["length"] = len(v)
+	default:
+		schema["type"] = reflect.TypeOf(v).String()
+	}
+	return schema
 }
