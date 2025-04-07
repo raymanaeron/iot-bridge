@@ -9,6 +9,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"iot-bridge/internal/store/factory"
 )
 
 type OpenAI struct {
@@ -19,7 +21,7 @@ type OpenAI struct {
 func NewOpenAI() LLMEngine {
 	return &OpenAI{
 		apiKey: os.Getenv("OPENAI_API_KEY"),
-		model:  "gpt-3.5-turbo", // or "gpt-4"
+		model:  "gpt-3.5-turbo", // or gpt-4
 	}
 }
 
@@ -38,10 +40,23 @@ Available API endpoints:
 - GET /scan/results → Retrieve discovered devices
 `
 
+	// Step 1: Get current device context
+	deviceStore := factory.GetDeviceStore()
+	devices := deviceStore.GetAll()
+
+	var deviceSummary []string
+	for _, d := range devices {
+		deviceSummary = append(deviceSummary, fmt.Sprintf("- ID: %s, Name: %s, Type: %s, Room: %s", d.ID, d.Name, d.Type, d.Room))
+	}
+	contextBlock := "Known devices:\n" + strings.Join(deviceSummary, "\n")
+
+	// Step 2: Build strict system prompt
 	systemPrompt := fmt.Sprintf(`
 You are an IoT planner.
 
-Given a human command, your job is to plan a series of REST API calls based on the following API spec:
+Given a natural language command, your job is to convert it into a sequence of REST API calls based on the following API spec:
+
+%s
 
 %s
 
@@ -55,12 +70,12 @@ Rules:
       }
     ]
   }
-- DO NOT include any explanation.
-- DO NOT wrap your response in markdown.
-- DO NOT output anything other than valid JSON.
-`, apiDoc)
+- DO NOT explain anything.
+- DO NOT wrap your output in markdown.
+- DO NOT include text outside the JSON.
+`, apiDoc, contextBlock)
 
-	// Few-shot learning: show what kind of response we expect
+	// Step 3: Few-shot example + user prompt
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
@@ -92,7 +107,6 @@ Rules:
 			} `json:"message"`
 		} `json:"choices"`
 	}
-
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse OpenAI response: %v\n%s", err, string(raw))
 	}
@@ -107,17 +121,16 @@ Rules:
 	return &plan, nil
 }
 
-// extractPureJSON removes markdown formatting (e.g., ```json ... ```) and trims content
+// extractPureJSON strips ```json and extra text if OpenAI returns markdown
 func extractPureJSON(s string) string {
 	s = strings.TrimSpace(s)
 
-	// Remove markdown triple backticks and optional "json" label
+	// Remove markdown triple-backticks
 	re := regexp.MustCompile("(?s)```(?:json)?(.*?)```")
 	matches := re.FindStringSubmatch(s)
 	if len(matches) > 1 {
 		return strings.TrimSpace(matches[1])
 	}
 
-	// If no markdown, assume it's raw JSON already
 	return s
 }
