@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 )
 
 type Ollama struct{}
@@ -76,6 +75,7 @@ func (o *Ollama) GeneratePlan(prompt string) (*Plan, error) {
 	return &plan, nil
 }
 
+/*
 func extractPureJSON(s string) string {
 	start := strings.Index(s, "{")
 	end := strings.LastIndex(s, "}")
@@ -90,4 +90,4 @@ func extractPureJSON(s string) string {
 		return strings.TrimSpace(jsonBlock)
 	}
 	return ""
-}
+}*/

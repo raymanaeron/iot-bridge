@@ -18,3 +18,8 @@ ollama pull tinyllama
 > To upload .env into the PI from Windows
 
 scp .env rayman@raspberrypi.local:/home/rayman/iot-bridge/
+
+> To run the LLM Test Script - you need these
+
+sudo apt update
+sudo apt install jq -y

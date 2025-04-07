@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"strings"
 )
 
 type OpenAI struct {
@@ -17,76 +19,54 @@ type OpenAI struct {
 func NewOpenAI() LLMEngine {
 	return &OpenAI{
 		apiKey: os.Getenv("OPENAI_API_KEY"),
-		model:  "gpt-3.5-turbo", // You can switch to gpt-4 if needed
+		model:  "gpt-3.5-turbo", // or "gpt-4"
 	}
 }
 
 func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
+	apiDoc := `
+Available API endpoints:
 
-	var apiDoc = `
-	Available API endpoints:
+- GET /devices → List all devices
+- GET /devices/{id} → Get info for a device
+- POST /devices → Add a new device
+- PATCH /devices/{id} → Update device metadata (name, room, etc)
+- DELETE /devices/{id} → Remove a device
+- GET /devices/{id}/capabilities → List what actions a device supports
+- POST /devices/{id}/capabilities/{capability} → Turn on/off, change brightness, etc.
+- POST /scan → Start device scan
+- GET /scan/results → Retrieve discovered devices
+`
 
-	- GET /devices → List all devices
-	- GET /devices/{id} → Get info for a device
-	- POST /devices → Add a new device
-	- PATCH /devices/{id} → Update device metadata
-	- DELETE /devices/{id} → Remove a device
-	- GET /devices/{id}/capabilities → List what actions a device supports
-	- POST /devices/{id}/capabilities/{capability} → Turn on/off, change brightness, etc.
-	- POST /scan → Start device scan
-	- GET /scan/results → Retrieve discovered devices
-	`
 	systemPrompt := fmt.Sprintf(`
-	You are an IoT planner.
-	
-	Given a human command, your job is to plan a series of REST API calls based on the following API spec:
-	
-	%s
-	
-	Rules:
-	- Respond ONLY with a JSON object that includes "actions".
-	- DO NOT explain your response.
-	- DO NOT wrap the output in markdown.
-	`, apiDoc)
+You are an IoT planner.
 
-	/*
-	   	systemPrompt := `
-	   You are an IoT planner.
+Given a human command, your job is to plan a series of REST API calls based on the following API spec:
 
-	   Device IDs like "plug1" or "bulb2" are permanent identifiers and do not change.
+%s
 
-	   Users may rename a device by updating its 'name' field via:
-	   PATCH /devices/{id}
+Rules:
+- Respond ONLY with a JSON object like:
+  {
+    "actions": [
+      {
+        "method": "GET",
+        "endpoint": "/devices"
+      }
+    ]
+  }
+- DO NOT include any explanation.
+- DO NOT wrap your response in markdown.
+- DO NOT output anything other than valid JSON.
+`, apiDoc)
 
-	   But the ID remains the same and must still be used in all future actions.
-
-	   Respond ONLY with a JSON object like this:
-
-	   {
-	     "actions": [
-	       {
-	         "method": "PATCH",
-	         "endpoint": "/devices/plug1",
-	         "body": { "name": "multi-plug" }
-	       },
-	       {
-	         "method": "POST",
-	         "endpoint": "/devices/plug1/capabilities/power",
-	         "body": { "state": "on" }
-	       }
-	     ]
-	   }
-
-	   Do NOT wrap the output in markdown.
-	   Do NOT include any explanation.
-	   Respond ONLY with the JSON object.
-	   `
-	*/
-
+	// Few-shot learning: show what kind of response we expect
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": "List all devices"},
+			{"role": "assistant", "content": `{"actions":[{"method":"GET","endpoint":"/devices"}]}`},
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.2,
@@ -104,6 +84,7 @@ func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
 	defer resp.Body.Close()
 
 	raw, _ := io.ReadAll(resp.Body)
+
 	var result struct {
 		Choices []struct {
 			Message struct {
@@ -111,6 +92,7 @@ func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
 			} `json:"message"`
 		} `json:"choices"`
 	}
+
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse OpenAI response: %v\n%s", err, string(raw))
 	}
@@ -123,4 +105,19 @@ func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
 	}
 
 	return &plan, nil
+}
+
+// extractPureJSON removes markdown formatting (e.g., ```json ... ```) and trims content
+func extractPureJSON(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Remove markdown triple backticks and optional "json" label
+	re := regexp.MustCompile("(?s)```(?:json)?(.*?)```")
+	matches := re.FindStringSubmatch(s)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+
+	// If no markdown, assume it's raw JSON already
+	return s
 }
