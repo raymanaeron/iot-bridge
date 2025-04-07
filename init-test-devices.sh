@@ -6,58 +6,73 @@ echo "🧹 Deleting all existing devices..."
 existing=$(curl -s "$baseUrl/devices" | jq -r '.[].id')
 for id in $existing; do
   echo "❌ Deleting $id"
-  curl -s -X DELETE "$baseUrl/devices/$id"
+  curl -s -X DELETE "$baseUrl/devices/$id" > /dev/null
 done
-
 echo "✅ Clean slate ready."
 
 echo ""
 echo "➕ Adding test devices..."
 
-curl -s -X POST "$baseUrl/devices" -H "Content-Type: application/json" -d '{
+add_device() {
+  local id=$1
+  local payload=$2
+  response=$(curl -s -w "%{http_code}" -o /tmp/add_device_response.json \
+    -X POST "$baseUrl/devices" \
+    -H "Content-Type: application/json" \
+    -d "$payload")
+
+  if [[ "$response" == "201" ]]; then
+    echo "✅ $id added"
+  else
+    echo "❌ Failed to add $id (HTTP $response):"
+    cat /tmp/add_device_response.json
+  fi
+}
+
+add_device "bulb1" '{
   "id": "bulb1",
   "name": "Living Room Bulb",
   "type": "bulb",
   "protocol": "zigbee",
   "room": "Living Room",
   "state": {}
-}' && echo "💡 bulb1 added"
+}'
 
-curl -s -X POST "$baseUrl/devices" -H "Content-Type: application/json" -d '{
+add_device "plug1" '{
   "id": "plug1",
   "name": "Coffee Machine Plug",
   "type": "smart_plug",
   "protocol": "zwave",
   "room": "Kitchen",
   "state": {}
-}' && echo "🔌 plug1 added"
+}'
 
-curl -s -X POST "$baseUrl/devices" -H "Content-Type: application/json" -d '{
+add_device "fan1" '{
   "id": "fan1",
   "name": "Ceiling Fan",
   "type": "fan",
   "protocol": "zigbee",
   "room": "Bedroom",
   "state": {}
-}' && echo "🌪️ fan1 added"
+}'
 
-curl -s -X POST "$baseUrl/devices" -H "Content-Type: application/json" -d '{
+add_device "speaker1" '{
   "id": "speaker1",
   "name": "Kitchen Speaker",
   "type": "speaker",
   "protocol": "wifi",
   "room": "Kitchen",
   "state": {}
-}' && echo "🔊 speaker1 added"
+}'
 
-curl -s -X POST "$baseUrl/devices" -H "Content-Type: application/json" -d '{
+add_device "coffee1" '{
   "id": "coffee1",
   "name": "Coffee Maker",
   "type": "smart_appliance",
   "protocol": "zwave",
   "room": "Kitchen",
   "state": {}
-}' && echo "☕ coffee1 added"
+}'
 
 echo ""
 echo "🧠 Adding device capabilities..."
@@ -65,12 +80,19 @@ echo "🧠 Adding device capabilities..."
 post_caps() {
   device_id=$1
   payload=$2
-  curl -s -X POST "$baseUrl/devices/$device_id/capabilities" \
-    -H "Content-Type: application/json" -d "$payload" \
-    && echo "✅ Capabilities set for $device_id"
+  response=$(curl -s -w "%{http_code}" -o /tmp/cap_resp.json \
+    -X POST "$baseUrl/devices/$device_id/capabilities" \
+    -H "Content-Type: application/json" \
+    -d "$payload")
+
+  if [[ "$response" == "204" ]]; then
+    echo "✅ Capabilities set for $device_id"
+  else
+    echo "❌ Failed to set capabilities for $device_id (HTTP $response):"
+    cat /tmp/cap_resp.json
+  fi
 }
 
-# Capabilities for each device type
 post_caps bulb1 '[
   {
     "name": "power",
