@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IoT Assistant</title>
+  <script src="/static/app.js" defer></script>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
+    .chatbox { border: 1px solid #ddd; padding: 20px; min-height: 300px; }
+    .user { color: blue; font-weight: bold; }
+    .assistant { color: green; margin-top: 10px; white-space: pre-wrap; }
+    input[type="text"] { width: 80%; padding: 10px; }
+    button { padding: 10px 15px; }
+  </style>
+</head>
+<body>
+  <h1>💬 IoT Chat Assistant</h1>
+  <div class="chatbox" id="chat"></div>
+  <br />
+  <input type="text" id="prompt" placeholder="e.g. turn on the ceiling fan" />
+  <button onclick="sendPrompt()">Send</button>
+</body>
+</html>

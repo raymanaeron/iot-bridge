@@ -36,6 +36,11 @@ func NewRouter() http.Handler {
 	})
 
 	r.Post("/llm", handlers.HandleLLMRequest)
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./web/index.html")
+	})
+
+	r.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./web"))))
 
 	return r
 }
