@@ -21,7 +21,6 @@ func New() store.DeviceStore {
 	os.MkdirAll(filepath.Dir(dbPath), 0755)
 
 	db, err := sql.Open("sqlite", dbPath)
-
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open SQLite DB: %v", err))
 	}
@@ -33,7 +32,8 @@ func New() store.DeviceStore {
 		type TEXT,
 		protocol TEXT,
 		room TEXT,
-		state TEXT
+		state TEXT,
+		capabilities TEXT
 	);
 	`
 	if _, err := db.Exec(createTable); err != nil {
@@ -45,14 +45,18 @@ func New() store.DeviceStore {
 
 func (s *SQLiteStore) Add(device store.Device) error {
 	stateJSON, _ := json.Marshal(device.State)
+	capsJSON, _ := json.Marshal(device.Capabilities)
 
-	_, err := s.db.Exec(`INSERT OR REPLACE INTO devices (id, name, type, protocol, room, state) VALUES (?, ?, ?, ?, ?, ?)`,
-		device.ID, device.Name, device.Type, device.Protocol, device.Room, string(stateJSON))
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO devices (id, name, type, protocol, room, state, capabilities)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		device.ID, device.Name, device.Type, device.Protocol, device.Room, string(stateJSON), string(capsJSON),
+	)
 	return err
 }
 
 func (s *SQLiteStore) GetAll() []store.Device {
-	rows, err := s.db.Query(`SELECT id, name, type, protocol, room, state FROM devices`)
+	rows, err := s.db.Query(`SELECT id, name, type, protocol, room, state, capabilities FROM devices`)
 	if err != nil {
 		return []store.Device{}
 	}
@@ -61,9 +65,10 @@ func (s *SQLiteStore) GetAll() []store.Device {
 	var devices []store.Device
 	for rows.Next() {
 		var d store.Device
-		var stateJSON string
-		if err := rows.Scan(&d.ID, &d.Name, &d.Type, &d.Protocol, &d.Room, &stateJSON); err == nil {
+		var stateJSON, capsJSON string
+		if err := rows.Scan(&d.ID, &d.Name, &d.Type, &d.Protocol, &d.Room, &stateJSON, &capsJSON); err == nil {
 			json.Unmarshal([]byte(stateJSON), &d.State)
+			json.Unmarshal([]byte(capsJSON), &d.Capabilities)
 			devices = append(devices, d)
 		}
 	}
@@ -71,15 +76,16 @@ func (s *SQLiteStore) GetAll() []store.Device {
 }
 
 func (s *SQLiteStore) Get(id string) (store.Device, bool) {
-	row := s.db.QueryRow(`SELECT id, name, type, protocol, room, state FROM devices WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, name, type, protocol, room, state, capabilities FROM devices WHERE id = ?`, id)
 
 	var d store.Device
-	var stateJSON string
-	err := row.Scan(&d.ID, &d.Name, &d.Type, &d.Protocol, &d.Room, &stateJSON)
+	var stateJSON, capsJSON string
+	err := row.Scan(&d.ID, &d.Name, &d.Type, &d.Protocol, &d.Room, &stateJSON, &capsJSON)
 	if err != nil {
 		return store.Device{}, false
 	}
 	json.Unmarshal([]byte(stateJSON), &d.State)
+	json.Unmarshal([]byte(capsJSON), &d.Capabilities)
 	return d, true
 }
 

@@ -1,12 +1,13 @@
 package store
 
 type Device struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Type     string            `json:"type"`
-	Protocol string            `json:"protocol"`
-	Room     string            `json:"room"`
-	State    map[string]string `json:"state"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Type         string            `json:"type"`
+	Protocol     string            `json:"protocol"`
+	Room         string            `json:"room"`
+	State        map[string]string `json:"state"`
+	Capabilities []Capability      `json:"capabilities"`
 }
 
 type DeviceStore interface {

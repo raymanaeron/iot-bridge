@@ -21,15 +21,41 @@ func GetCapabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	capabilities := storemodel.GetCapabilitiesForType(device.Type)
+	// capabilities := storemodel.GetCapabilitiesForType(device.Type)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":           device.ID,
-		"type":         device.Type,
-		"name":         device.Name,
-		"capabilities": capabilities,
+		"id":   device.ID,
+		"type": device.Type,
+		"name": device.Name,
+		//"capabilities": capabilities,
+		"capabilities": device.Capabilities,
 	})
+}
+
+func UpdateCapabilities(w http.ResponseWriter, r *http.Request) {
+	deviceID := chi.URLParam(r, "id")
+	store := factory.GetDeviceStore()
+
+	var newCaps []storemodel.Capability
+	if err := json.NewDecoder(r.Body).Decode(&newCaps); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	device, ok := store.Get(deviceID)
+	if !ok {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	device.Capabilities = newCaps
+	if err := store.Add(device); err != nil {
+		http.Error(w, "Failed to update capabilities", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func InvokeCapability(w http.ResponseWriter, r *http.Request) {
