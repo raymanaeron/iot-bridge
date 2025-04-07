@@ -23,37 +23,66 @@ func NewOpenAI() LLMEngine {
 
 func (o *OpenAI) GeneratePlan(prompt string) (*Plan, error) {
 
-	systemPrompt := `
-You are an IoT planner.
+	var apiDoc = `
+	Available API endpoints:
 
-Device IDs like "plug1" or "bulb2" are permanent identifiers and do not change.
+	- GET /devices → List all devices
+	- GET /devices/{id} → Get info for a device
+	- POST /devices → Add a new device
+	- PATCH /devices/{id} → Update device metadata
+	- DELETE /devices/{id} → Remove a device
+	- GET /devices/{id}/capabilities → List what actions a device supports
+	- POST /devices/{id}/capabilities/{capability} → Turn on/off, change brightness, etc.
+	- POST /scan → Start device scan
+	- GET /scan/results → Retrieve discovered devices
+	`
+	systemPrompt := fmt.Sprintf(`
+	You are an IoT planner.
+	
+	Given a human command, your job is to plan a series of REST API calls based on the following API spec:
+	
+	%s
+	
+	Rules:
+	- Respond ONLY with a JSON object that includes "actions".
+	- DO NOT explain your response.
+	- DO NOT wrap the output in markdown.
+	`, apiDoc)
 
-Users may rename a device by updating its 'name' field via:
-PATCH /devices/{id}
+	/*
+	   	systemPrompt := `
+	   You are an IoT planner.
 
-But the ID remains the same and must still be used in all future actions.
+	   Device IDs like "plug1" or "bulb2" are permanent identifiers and do not change.
 
-Respond ONLY with a JSON object like this:
+	   Users may rename a device by updating its 'name' field via:
+	   PATCH /devices/{id}
 
-{
-  "actions": [
-    {
-      "method": "PATCH",
-      "endpoint": "/devices/plug1",
-      "body": { "name": "multi-plug" }
-    },
-    {
-      "method": "POST",
-      "endpoint": "/devices/plug1/capabilities/power",
-      "body": { "state": "on" }
-    }
-  ]
-}
+	   But the ID remains the same and must still be used in all future actions.
 
-Do NOT wrap the output in markdown.
-Do NOT include any explanation.
-Respond ONLY with the JSON object.
-`
+	   Respond ONLY with a JSON object like this:
+
+	   {
+	     "actions": [
+	       {
+	         "method": "PATCH",
+	         "endpoint": "/devices/plug1",
+	         "body": { "name": "multi-plug" }
+	       },
+	       {
+	         "method": "POST",
+	         "endpoint": "/devices/plug1/capabilities/power",
+	         "body": { "state": "on" }
+	       }
+	     ]
+	   }
+
+	   Do NOT wrap the output in markdown.
+	   Do NOT include any explanation.
+	   Respond ONLY with the JSON object.
+	   `
+	*/
+
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
