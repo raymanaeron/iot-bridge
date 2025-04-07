@@ -20,7 +20,8 @@ func New() store.DeviceStore {
 	dbPath := filepath.Join(".", "devices.db")
 	os.MkdirAll(filepath.Dir(dbPath), 0755)
 
-	db, err := sql.Open("sqlite", dbPath)
+	//db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000")
 	if err != nil {
 		panic(fmt.Sprintf("Failed to open SQLite DB: %v", err))
 	}
