@@ -52,29 +52,32 @@ Available API endpoints:
 
 	// Step 2: Build strict system prompt
 	systemPrompt := fmt.Sprintf(`
-You are an IoT planner.
-
-Given a natural language command, your job is to convert it into a sequence of REST API calls based on the following API spec:
-
-%s
-
-%s
-
-Rules:
-- Respond ONLY with a JSON object like:
-  {
-    "actions": [
-      {
-        "method": "GET",
-        "endpoint": "/devices"
-      }
-    ]
-  }
-- DO NOT leave out required parameters from capabilities
-- DO NOT explain anything.
-- DO NOT wrap your output in markdown.
-- DO NOT include text outside the JSON.
-`, apiDoc, contextBlock)
+	You are an IoT planner.
+	
+	Given a natural language command, your job is to convert it into a sequence of REST API calls based on the following API spec:
+	
+	%s
+	
+	%s
+	
+	Rules:
+	- Each action must include the correct HTTP method, endpoint, and required JSON body (if needed).
+	- Refer to capabilities and parameters already known in the context.
+	- Use the correct parameter names and values for things like brightness, speed, volume, etc.
+	- Always respond ONLY with a JSON object like:
+	  {
+		"actions": [
+		  {
+			"method": "POST",
+			"endpoint": "/devices/fan1/capabilities/speed",
+			"body": { "level": 75 }
+		  }
+		]
+	  }
+	- DO NOT explain anything.
+	- DO NOT wrap output in markdown.
+	- DO NOT include any text outside the JSON block.
+	`, apiDoc, contextBlock)
 
 	// Step 3: Few-shot examples + user prompt
 	payload := map[string]interface{}{
