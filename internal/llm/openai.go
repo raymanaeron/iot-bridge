@@ -21,7 +21,7 @@ type OpenAI struct {
 func NewOpenAI() LLMEngine {
 	return &OpenAI{
 		apiKey: os.Getenv("OPENAI_API_KEY"),
-		model:  "gpt-3.5-turbo", // or gpt-4
+		model:  "gpt-3.5-turbo",
 	}
 }
 
@@ -40,72 +40,54 @@ Available API endpoints:
 - GET /scan/results → Retrieve discovered devices
 `
 
-	// Get live context from DB
 	deviceStore := factory.GetDeviceStore()
 	devices := deviceStore.GetAll()
 
-	var contextBlock strings.Builder
-	contextBlock.WriteString("Known devices and their capabilities:\n")
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString("Known devices and capabilities:\n")
 	for _, d := range devices {
-		contextBlock.WriteString(fmt.Sprintf("- ID: %s, Name: %s, Type: %s, Room: %s\n", d.ID, d.Name, d.Type, d.Room))
+		contextBuilder.WriteString(fmt.Sprintf("- ID: %s, Name: %s, Type: %s, Room: %s\n", d.ID, d.Name, d.Type, d.Room))
 		for _, cap := range d.Capabilities {
-			paramNames := make([]string, 0, len(cap.Parameters))
+			var paramList []string
 			for k := range cap.Parameters {
-				paramNames = append(paramNames, k)
+				paramList = append(paramList, k)
 			}
-			contextBlock.WriteString(fmt.Sprintf("  • %s (%s)\n", cap.Name, strings.Join(paramNames, ", ")))
+			contextBuilder.WriteString(fmt.Sprintf("  • %s (%s)\n", cap.Name, strings.Join(paramList, ", ")))
 		}
 	}
 
 	systemPrompt := fmt.Sprintf(`
 You are an IoT planner.
 
-Given a natural language command, convert it into a sequence of REST API calls based on the following API spec:
+Given a natural language command, convert it into a sequence of REST API calls based on the following API specification:
 
 %s
 
 %s
 
 Rules:
-- Each action must include the correct HTTP method, endpoint, and JSON body (if needed).
-- Refer to capabilities and parameter names from the context above.
-- Always respond with a JSON object like:
+- Only use device IDs and capabilities provided in the context.
+- Include the correct method, endpoint, and JSON body for each action.
+- Ensure parameter names and value types match what is available.
+- Respond only with a valid JSON object in this format:
   {
     "actions": [
       {
         "method": "POST",
-        "endpoint": "/devices/fan1/capabilities/speed",
-        "body": { "level": 75 }
+        "endpoint": "/devices/plug1/capabilities/power",
+        "body": { "state": "on" }
       }
     ]
   }
-- DO NOT explain anything.
-- DO NOT wrap output in markdown.
-- DO NOT include any extra text.
-`, apiDoc, contextBlock.String())
+- Do not include explanations or markdown.
+`, apiDoc, contextBuilder.String())
 
 	payload := map[string]interface{}{
 		"model": o.model,
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
-
-			// Few-shot example: list devices
 			{"role": "user", "content": "List all devices"},
 			{"role": "assistant", "content": `{"actions":[{"method":"GET","endpoint":"/devices"}]}`},
-
-			// Few-shot example: set fan speed
-			{"role": "user", "content": "Set ceiling fan speed to 75%"},
-			{"role": "assistant", "content": `{
-  "actions": [
-    {
-      "method": "POST",
-      "endpoint": "/devices/fan1/capabilities/speed",
-      "body": { "level": 75 }
-    }
-  ]
-}`},
-
-			// Actual user prompt
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.2,
@@ -145,11 +127,10 @@ Rules:
 	return &plan, nil
 }
 
-// extractPureJSON strips ```json and extra text if OpenAI returns markdown
+// extractPureJSON strips markdown ``` wrappers or formatting text if present
 func extractPureJSON(s string) string {
 	s = strings.TrimSpace(s)
 
-	// Remove markdown triple-backticks
 	re := regexp.MustCompile("(?s)```(?:json)?(.*?)```")
 	matches := re.FindStringSubmatch(s)
 	if len(matches) > 1 {
