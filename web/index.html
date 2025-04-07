@@ -1,23 +1,59 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8" />
-  <title>IoT Assistant</title>
-  <script src="/static/app.js" defer></script>
+  <title>IoT Chat Interface</title>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
-    .chatbox { border: 1px solid #ddd; padding: 20px; min-height: 300px; }
-    .user { color: blue; font-weight: bold; }
-    .assistant { color: green; margin-top: 10px; white-space: pre-wrap; }
-    input[type="text"] { width: 80%; padding: 10px; }
-    button { padding: 10px 15px; }
+    body {
+      font-family: sans-serif;
+      margin: 2rem auto;
+      max-width: 800px;
+    }
+    textarea {
+      width: 100%;
+      height: 80px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-top: 1rem;
+    }
+    pre {
+      background: #f4f4f4;
+      padding: 1rem;
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
+    }
   </style>
 </head>
 <body>
-  <h1>💬 IoT Chat Assistant</h1>
-  <div class="chatbox" id="chat"></div>
+  <h1>IoT Chat</h1>
+  <textarea id="prompt" placeholder="Ask something..."></textarea>
   <br />
-  <input type="text" id="prompt" placeholder="e.g. turn on the ceiling fan" />
-  <button onclick="sendPrompt()">Send</button>
+  <button onclick="send()">Send</button>
+
+  <h2>Response</h2>
+  <pre id="output"></pre>
+
+  <script>
+    async function send() {
+      const prompt = document.getElementById("prompt").value;
+      const output = document.getElementById("output");
+      output.textContent = "Thinking...";
+
+      try {
+        const res = await fetch("/llm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt })
+        });
+
+        const text = await res.text();
+        output.textContent = text;
+      } catch (err) {
+        output.textContent = "Error: " + err.message;
+      }
+    }
+  </script>
 </body>
 </html>
