@@ -60,4 +60,80 @@ curl -s -X POST "$baseUrl/devices" -H "Content-Type: application/json" -d '{
 }' && echo "☕ coffee1 added"
 
 echo ""
-echo "🎉 Test devices initialized!"
+echo "🧠 Adding device capabilities..."
+
+post_caps() {
+  device_id=$1
+  payload=$2
+  curl -s -X POST "$baseUrl/devices/$device_id/capabilities" \
+    -H "Content-Type: application/json" -d "$payload" \
+    && echo "✅ Capabilities set for $device_id"
+}
+
+# Capabilities for each device type
+post_caps bulb1 '[
+  {
+    "name": "power",
+    "description": "Turn bulb on or off",
+    "parameters": { "state": { "type": "string", "operations": ["on", "off"] } },
+    "operations": ["on", "off"]
+  },
+  {
+    "name": "brightness",
+    "description": "Adjust brightness level",
+    "parameters": { "level": { "type": "integer", "range": [0, 100] } }
+  }
+]'
+
+post_caps plug1 '[
+  {
+    "name": "power",
+    "description": "Turn plug on or off",
+    "parameters": { "state": { "type": "string", "operations": ["on", "off"] } },
+    "operations": ["on", "off"]
+  }
+]'
+
+post_caps fan1 '[
+  {
+    "name": "power",
+    "description": "Turn fan on or off",
+    "parameters": { "state": { "type": "string", "operations": ["on", "off"] } },
+    "operations": ["on", "off"]
+  },
+  {
+    "name": "speed",
+    "description": "Set fan speed",
+    "parameters": { "level": { "type": "integer", "range": [0, 100] } }
+  }
+]'
+
+post_caps speaker1 '[
+  {
+    "name": "volume",
+    "description": "Adjust volume",
+    "parameters": { "level": { "type": "integer", "range": [0, 100] } }
+  },
+  {
+    "name": "playback",
+    "description": "Play or pause music",
+    "parameters": { "command": { "type": "string", "operations": ["play", "pause", "stop"] } }
+  }
+]'
+
+post_caps coffee1 '[
+  {
+    "name": "power",
+    "description": "Turn coffee maker on or off",
+    "parameters": { "state": { "type": "string", "operations": ["on", "off"] } },
+    "operations": ["on", "off"]
+  },
+  {
+    "name": "brew",
+    "description": "Start brewing",
+    "parameters": { "cups": { "type": "integer", "range": [1, 12] } }
+  }
+]'
+
+echo ""
+echo "🎉 Devices and capabilities initialized!"
