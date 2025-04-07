@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"iot-bridge/internal/llm"
-	"iot-bridge/internal/store/factory"
 	"net/http"
 	"strings"
+
+	"iot-bridge/internal/llm"
+	"iot-bridge/internal/store"
 )
 
 type LLMRequest struct {
@@ -16,20 +17,17 @@ type LLMRequest struct {
 }
 
 type ActionResult struct {
-	Endpoint string `json:"endpoint"`
 	Method   string `json:"method"`
+	Endpoint string `json:"endpoint"`
 	Status   string `json:"status"`
 }
 
-// 🧠 Match a known device name to its ID
-func resolveDeviceIDFromName(name string) (string, bool) {
-	devices := factory.GetDeviceStore().GetAll()
-	for _, d := range devices {
-		if strings.EqualFold(d.Name, name) {
-			return d.ID, true
-		}
-	}
-	return "", false
+type DeviceWithCapabilities struct {
+	ID           string             `json:"id"`
+	Name         string             `json:"name"`
+	Type         string             `json:"type"`
+	Room         string             `json:"room"`
+	Capabilities []store.Capability `json:"capabilities"`
 }
 
 func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
@@ -46,29 +44,23 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 🧠 Patch any placeholder {id} with real ID from prompt
-	for i, action := range plan.Actions {
-		if strings.Contains(action.Endpoint, "{id}") {
-			// Try matching any known device name inside the original prompt
-			devices := factory.GetDeviceStore().GetAll()
-			for _, d := range devices {
-				if strings.Contains(strings.ToLower(req.Prompt), strings.ToLower(d.Name)) {
-					plan.Actions[i].Endpoint = strings.Replace(action.Endpoint, "{id}", d.ID, 1)
-					break
-				}
-			}
-		}
-	}
-
 	var results []ActionResult
+	var formattedDevices []DeviceWithCapabilities
+
 	for _, action := range plan.Actions {
 		fullURL := fmt.Sprintf("http://localhost:8080%s", action.Endpoint)
 
-		req, err := http.NewRequest(action.Method, fullURL, bytes.NewReader(action.Body))
+		var method = strings.ToUpper(action.Method)
+		var body io.Reader
+		if len(action.Body) > 0 {
+			body = bytes.NewReader(action.Body)
+		}
+
+		req, err := http.NewRequest(method, fullURL, body)
 		if err != nil {
 			results = append(results, ActionResult{
+				Method:   method,
 				Endpoint: action.Endpoint,
-				Method:   action.Method,
 				Status:   "failed (invalid request)",
 			})
 			continue
@@ -78,14 +70,13 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			results = append(results, ActionResult{
+				Method:   method,
 				Endpoint: action.Endpoint,
-				Method:   action.Method,
 				Status:   "failed (HTTP error)",
 			})
 			continue
 		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		defer resp.Body.Close()
 
 		status := "success"
 		if resp.StatusCode >= 300 {
@@ -93,15 +84,55 @@ func HandleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		results = append(results, ActionResult{
+			Method:   method,
 			Endpoint: action.Endpoint,
-			Method:   action.Method,
 			Status:   status,
 		})
+
+		// Custom logic: If this is GET /devices → read all devices
+		if method == "GET" && action.Endpoint == "/devices" && resp.StatusCode == 200 {
+			var devices []store.Device
+			json.NewDecoder(resp.Body).Decode(&devices)
+
+			// pre-fill devices for capability fetch
+			for _, d := range devices {
+				formattedDevices = append(formattedDevices, DeviceWithCapabilities{
+					ID:   d.ID,
+					Name: d.Name,
+					Type: d.Type,
+					Room: d.Room,
+				})
+			}
+		}
+
+		// Populate capabilities into formattedDevices if this is a GET /devices/{id}/capabilities
+		if method == "GET" && strings.Contains(action.Endpoint, "/capabilities") && resp.StatusCode == 200 {
+			parts := strings.Split(action.Endpoint, "/")
+			if len(parts) >= 3 {
+				deviceID := parts[2]
+				var capsResp struct {
+					Capabilities []store.Capability `json:"capabilities"`
+				}
+				json.NewDecoder(resp.Body).Decode(&capsResp)
+
+				for i := range formattedDevices {
+					if formattedDevices[i].ID == deviceID {
+						formattedDevices[i].Capabilities = capsResp.Capabilities
+					}
+				}
+			}
+		}
+	}
+
+	// Response structure
+	respData := map[string]interface{}{
+		"prompt":  req.Prompt,
+		"actions": results,
+	}
+	if len(formattedDevices) > 0 {
+		respData["devices"] = formattedDevices
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"prompt":  req.Prompt,
-		"actions": results,
-	})
+	json.NewEncoder(w).Encode(respData)
 }
